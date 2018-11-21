@@ -1,0 +1,95 @@
+---
+title: "Genotype PCA"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Setup 
+
+```{r}
+
+"%&%" <- function(a,b) paste0(a,b)
+library("tidyverse")
+library("data.table")
+library("viridis")
+serv.dir <- "/home/jason/science/servers/FUSE5/"
+proj.dir <- serv.dir %&% "projects/crds/"
+cov.dir <- proj.dir %&% "covariates/"
+
+```
+
+
+
+Genotype file:
+/well/mccarthy/users/jason/projects/crds/covariates/genotypes100.recode.vcf
+
+# LD Pruning of file, MAF >= 0.01
+
+```{bash}
+
+/apps/well/plink/1.90b3/plink --vcf genotypes100.recode.vcf.gz --maf 0.01 --indep-pairwise 50 5 0.2 --out genotypes100.recode.pruned
+
+```
+
+
+# PCA analysis 
+
+```{bash}
+
+/apps/well/plink/1.90b3/plink --vcf genotypes100.recode.vcf.gz --extract genotypes100.recode.pruned.prune.in --pca var-wts --out genotypes100.recode.pruned
+
+```
+
+
+Visualize PCs 
+
+
+```{r}
+
+pca.df <- fread(cov.dir %&% "genotypes100.recode.pruned.eigenvec")
+names(pca.df) <- c("ID","ID2","PC"%&%1:(dim(pca.df)[2]-2))
+
+plt <- ggplot(data=pca.df,aes(x=PC1,y=PC2)) + 
+  geom_point(shape=21,color="black",fill="dodgerblue3",alpha=0.4,size=2) + 
+  geom_text(aes(label=ID),size=2.5) +
+  theme_classic()
+
+plt2 <- ggplot(data=filter(pca.df,!(ID=="R174")),aes(x=PC1,y=PC2)) + 
+  geom_point(shape=21,color="black",fill="dodgerblue3",alpha=0.4,size=2) + 
+  geom_text(aes(label=ID),size=2.5) +
+  theme_classic()
+
+```
+
+
+# Prepare covariate file 
+
+
+```{r}
+
+cov.df <- fread(cov.dir%&%"covariates.txt")
+names(pca.df)[1] <- "ID1"
+out.df <- inner_join(cov.df,pca.df,by="ID1")
+out.df <- select(out.df,-c("ID2.x","ID2.y")) %>% 
+  select(.,c("ID","ID1","SEX_GENO","PHENO_AGE","PHENO_BMI","PHENO_HBA1C","PC"%&%1:20))
+names(out.df)[1:6] <- c("ID","ID2","Sex","Age","BMI","HBA1C")
+write.table(x=out.df,file=cov.dir%&%"covariates_with_genotypePCs.txt",quote=F,sep="\t",row.names=F)
+
+```
+
+
+# Population comparison PCA
+
+```{bash}
+
+/apps/well/vcftools/0.1.14-gcc4.7.2/bin/vcf-merge CEU.low_coverage.2010_09.genotypes.vcf.gz CHBJPT.low_coverage.2010_09.genotypes.vcf.gz YRI.low_coverage.2010_09.genotypes.vcf.gz | bgzip -c > out.vcf.gz
+
+
+```
+
+
+
