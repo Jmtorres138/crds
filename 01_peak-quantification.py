@@ -73,8 +73,11 @@ def pipeline():
     fout.close()
 
     # FeatureCounts
+    # "P348"   "HP1507" didn't work at first attempt
+    # use instead P328 and HP1507_CMRL
     print("\nFeatureCounts")
     count = 0
+    sample_list = ["P328","HP1507_CMRL"]
     for f in sample_list:
         fname = bam_dir + f + ".bam"
         if os.path.isfile(fname) == True:
