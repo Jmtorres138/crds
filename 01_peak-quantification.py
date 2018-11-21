@@ -11,16 +11,17 @@ import os,sys,gzip,re
 import subprocess as sp
 import numpy
 
-work_dir = "/well/mccarthy/users/jason/projects/atac_analyses/evaluate_peaks/"
+work_dir = "/well/mccarthy/users/jason/projects/crds/"
 atac_dir = "/well/mccarthy/production/atac-seq/"
 peak_dir = atac_dir + "data/human_islets/full_merged_data/peaks/"
 bam_dir = atac_dir + "data/human_islets/full_merged_data/bams/"
-elife_file = "/well/mccarthy/users/jason/projects/atac_analyses/elife_samples_names_for_jason.txt"
-out_dir = work_dir + "eLife2018/"
+elife_file = "/well/mccarthy/users/jason/projects/crds/sample_names_100.txt"
+out_dir = work_dir + "peak_counts/"
 out_file = out_dir + "merged_peaks.txt"
-suffix = ".tn5.pval0.01.300K.bfilt.narrowPeak.gz"
+peak_file = "/well/mccarthy/users/maxlouis/CRD_bamfiles/123456_K00000_0123_ABCDEFGHIJ/merged/peaks/R177.rep1-pr.overlap.bfilt.narrowPeak.gz"
 
-def get_elife_list():
+
+def get_sample_list():
     fin = open(elife_file,'r')
     lst = []
     for l in fin:
@@ -29,21 +30,17 @@ def get_elife_list():
     return lst
 
 def pipeline():
-    elife_list = get_elife_list()
-    elife_list.append("HP1535")
-    elife_list.append("HP1507_CMRL")
-    print(elife_list)
+    sample_list = get_sample_list()
+    print(sample_list)
     fout = open(out_dir+"temp.bed",'w')
     fout.close()
     # Concatenate
-    for f in elife_list:
-        fname = peak_dir + f + suffix
-        if os.path.isfile(fname) == True:
-            sys.stdout.write(f+"\n")
-            #command = "zcat " + fname + " | cut -f 1,2,3,6 >> " + out_dir + "concat_peaks.bed"
-            command = "zcat " + fname + " | awk -v name="+f+ " '{print $1,\"\t\",$2,\"\t\",$3,\"\t\",$6,\"\t\",name}'" + " >> " + out_dir + "temp.bed"
-            sp.check_call(command,shell=True)
+    sys.stdout.write("Concatenate files"+"\n")
+    # note that ATAC could be replaced with a specific sample name
+    command = "zcat " + peak_file + " | awk -v name="+"ATAC"+ " '{print $1,\"\t\",$2,\"\t\",$3,\"\t\",$6,\"\t\",name}'" + " >> " + out_dir + "temp.bed"
+    sp.check_call(command,shell=True)
     # Ensure proper formatting
+    sys.stdout.write("Ensuring proper formatting"+"\n")
     fout = open(out_dir+"concat_peaks.bed",'w')
     fin = open(out_dir+"temp.bed",'r')
     for line in fin:
@@ -52,17 +49,20 @@ def pipeline():
     fin.close()
     fout.close()
     # Sort
+    sys.stdout.write("Sorting"+"\n")
+    #command="/apps/well/bedtools/2.24.0-18-gb0bc5b7/bin/bedtools sort -faidx " + atac_dir + "resources/hg19/chr_order_for_merging_peaks.txt -i " + out_dir +"concat_peaks.bed > " + out_dir + "concat_peaks.sorted.bed"
     command="/apps/well/bedtools/2.24.0-18-gb0bc5b7/bin/bedtools sort -faidx " + atac_dir + "resources/hg19/chr_order_for_merging_peaks.txt -i " + out_dir +"concat_peaks.bed > " + out_dir + "concat_peaks.sorted.bed"
-    #command = "sort -k1,1 -k2,2n " +  out_dir + "concat_peaks.bed" + " | uniq -u " " > " + out_dir + "concat_peaks.sorted.bed"
     sp.check_call(command,shell=True)
-    # Merge
-    command = "/apps/well/bedtools/2.24.0-18-gb0bc5b7/bin/bedtools merge -i " + out_dir + "concat_peaks.sorted.bed -c 5 -o collapse > "  + out_dir + "merged_peaks.bed"
-    sp.check_call(command,shell=True)
+    # Merge (not necessary here)
+    #sys.stdout.write("Merging"+"\n")
+    #command = "/apps/well/bedtools/2.24.0-18-gb0bc5b7/bin/bedtools merge -i " + out_dir + "concat_peaks.sorted.bed -c 5 -o collapse > "  + out_dir + "merged_peaks.bed"
+    #sp.check_call(command,shell=True)
     # Write SAF file
-    fout = open(out_dir+"merged_peaks.saf",'w')
+    sys.stdout.write("Writing SAF file"+"\n")
+    fout = open(out_dir+"atac_peaks.saf",'w')
     header = "GeneID\tChr\tStart\tEnd\tStrand\n"
     fout.write(header)
-    fin = open(out_dir+"merged_peaks.bed",'r')
+    fin = open(out_dir+"concat_peaks.sorted.bed",'r')
     count=0
     for line in fin:
         count+=1
@@ -74,18 +74,19 @@ def pipeline():
 
     # FeatureCounts
     print("\nFeatureCounts")
-    for f in elife_list:
+    count = 0
+    for f in sample_list:
         fname = bam_dir + f + ".bam"
         if os.path.isfile(fname) == True:
+            count += 1
             sys.stdout.write(f+"\n")
-            command = "/well/mccarthy/production/atac-seq/dependencies/featureCounts -p -a " + out_dir+"merged_peaks.saf" + " -F SAF -o " + out_dir + "merged_peaks.counts-"+f+".txt -T 4 --largestOverlap --ignoreDup -C -f " + fname
+            print count
+            command = "/well/mccarthy/production/atac-seq/dependencies/featureCounts -p -a " + out_dir+"atac_peaks.saf" + " -F SAF -o " + out_dir + "atac_peaks.counts-"+f+".txt -T 4 --largestOverlap --ignoreDup -C -f " + fname
             sp.check_call(command,shell=True)
-
 
 
 def main():
     pipeline()
-    #merge_bed_file(out_file)
 
 
 if (__name__=="__main__"): main()
